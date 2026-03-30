@@ -1,0 +1,22 @@
+
+services:
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: teste_servico_s3_da_aws:1.0.0
+    container_name: teste_servico_s3_da_aws
+    env_file:
+      - .env
+    ports:
+      - "3006:3006"
+    networks:
+      - teste_servico_s3_da_aws_network
+
+
+networks:
+  teste_servico_s3_da_aws_network:
+    driver: bridge
+# volumes:
+#   teste_servico_s3_da_aws_data:

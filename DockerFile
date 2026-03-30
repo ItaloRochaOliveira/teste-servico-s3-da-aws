@@ -1,0 +1,28 @@
+# Schema da base: não está nesta imagem — ver na raiz init.sql e migration.sql (docker-compose).
+# Etapa 1: criar pasta e colocar arquivo de dependencia nele, também baixar elas e buildar.
+FROM node:20-alpine AS build
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml tsconfig.json ./
+RUN npm install -g pnpm
+RUN pnpm install
+
+COPY src ./src
+
+RUN pnpm run build
+
+# Etapa 2: baixar dependenc. de prod. e rodar app.
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml ./
+RUN npm install -g pnpm
+RUN pnpm install --prod
+
+COPY --from=build /app/build ./build
+
+EXPOSE 3006
+
+CMD ["pnpm", "start"]

@@ -1,0 +1,32 @@
+{
+  "name": "teste-servico-s3-da-aws",
+  "version": "1.0.0",
+  "description": "testando serviço s3 da aws",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com-pessoal:ItaloRochaOliveira/teste-servico-s3-da-aws.git"
+  },
+  "license": "ISC",
+  "author": "Italo Rocha Oliveira",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "axios": "^1.14.0",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.1.1",
+    "winston": "^3.19.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/axios": "^0.14.4",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.1.0"
+  }
+}

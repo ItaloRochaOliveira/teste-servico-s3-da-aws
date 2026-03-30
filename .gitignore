@@ -1,0 +1,14 @@
+node_modules/
+.env
+build/
+
+dist/*
+!src/**/*.pug
+
+logs/
+/logs/
+logs/*
+
+uploads/
+
+certificate/*
