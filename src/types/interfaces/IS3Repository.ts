@@ -1,4 +1,7 @@
+import { Bucket, GetObjectCommandOutput, ListBucketsCommandOutput, PutObjectCommandOutput } from "@aws-sdk/client-s3";
+
 export default interface IS3Repository {
-  upload(file: Express.Multer.File): Promise<void>;
-  download(fileName: string): Promise<void>;
+  listBuckets(): Promise<Bucket[] | undefined>;
+  upload(file: Express.Multer.File): Promise<PutObjectCommandOutput>;
+  download(fileName: string): Promise<GetObjectCommandOutput>;
 }
