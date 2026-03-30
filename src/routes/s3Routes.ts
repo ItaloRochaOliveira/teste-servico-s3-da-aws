@@ -6,6 +6,7 @@ import { MulterConfig } from "@/config/multer.config";
 const s3Controller = new S3Controller();
 
 const s3Routes: Router = Router();
+s3Routes.get("/list-buckets", s3Controller.listBuckets);
 s3Routes.post("/upload", MulterConfig.upload().single("file"), s3Controller.upload);
 s3Routes.get("/download", s3Controller.download);
 
