@@ -6,7 +6,7 @@ API REST em **Node.js** para listar buckets, enviar e baixar objetos no **Amazon
 
 ### 🪣 Amazon S3
 - ✅ Listagem de buckets da conta configurada
-- ✅ Listagem de objetos do bucket configurado (`ListObjectsV2`), com prefixo opcional e paginação
+- ✅ Listagem de objetos do bucket configurado (`ListObjectsV2`), com prefixo opcional, paginação e **`pathTree`** (pastas como objetos, arquivos agrupados em arrays)
 - ✅ Upload de arquivos via **multipart/form-data** (campo `file`)
 - ✅ Download por **key** do objeto, com inferência de MIME pela extensão quando o S3 retorna tipo genérico
 - ✅ Resposta de download alinhada ao tipo: JSON parseado, texto (`text/plain`, `.txt`, etc.) ou binário com `Content-Type` adequado
@@ -53,7 +53,7 @@ teste-servico-s3-da-aws/
 │   ├── config/                # Multer, Winston
 │   ├── midleware/
 │   │   └── ErrorMidleware.ts
-│   ├── utils/                 # fileDownload (MIME/tipos), erros HTTP, etc.
+│   ├── utils/                 # fileDownload, pathTreeFromKeys (árvore de keys), erros HTTP, etc.
 │   └── types/
 ├── .github/
 │   └── IA_NOVAS_ROTAS.md      # Guia para IA e devs: novas rotas Express
@@ -153,9 +153,40 @@ Base: `http://localhost:<PORT>`
 |--------|------|-----------|
 | `GET` | `/` | Informações básicas da API (JSON) |
 | `GET` | `/s3/list-buckets` | Lista buckets |
-| `GET` | `/s3/list-objects` | Lista objetos do `AWS_BUCKET_NAME`; resposta inclui `objects` (plano) e `pathTree` (hierarquia por `/`) |
+| `GET` | `/s3/list-objects` | Lista objetos do `AWS_BUCKET_NAME`; documentação completa na subseção **GET /s3/list-objects** abaixo |
 | `POST` | `/s3/upload` | Upload de arquivo (`multipart/form-data`, campo **`file`**) |
 | `GET` | `/s3/download?fileName=<key>` | Download do objeto pela **key** no bucket |
+
+### GET /s3/list-objects
+
+Lista objetos do bucket definido em `AWS_BUCKET_NAME` via API **ListObjectsV2** da AWS. A rota está registrada em `app.ts` como `GET /s3/list-objects` (mesmo prefixo `/s3` das demais rotas S3).
+
+#### Query parameters (todos opcionais, validados com Zod)
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `prefix` | string | Prefixo da key (como “pasta” no S3). Ex.: `docs/` ou `projeto/imagens/`. Máx. 1024 caracteres. |
+| `continuationToken` | string | Token retornado em `nextContinuationToken` na página anterior, para listar a próxima página quando `isTruncated` for `true`. |
+| `maxKeys` | número | Quantidade máxima de keys nesta resposta (1–1000). |
+
+#### Corpo da resposta (`200`, JSON)
+
+| Campo | Descrição |
+|-------|-----------|
+| `objects` | Lista plana de objetos: `key`, `size`, `lastModified` (ISO 8601), `etag`, `storageClass`. |
+| `pathTree` | Árvore derivada das keys (separador `/`). Pastas viram objetos aninhados; arquivos no mesmo diretório aparecem em **um array de strings** (nomes dos ficheiros). |
+| `isTruncated` | `true` se existirem mais objetos; use `continuationToken` na próxima chamada. |
+| `nextContinuationToken` | Presente quando há próxima página; copie para o query `continuationToken`. |
+| `prefix` | O mesmo `prefix` enviado na query (eco). |
+
+#### Formato de `pathTree`
+
+- **Só ficheiros nessa pasta:** o valor é o array de nomes, p.ex. `"relatorios": ["a.pdf", "b.pdf"]`.
+- **Só subpastas:** o valor é um objeto com o próximo nível, p.ex. `"relatorios": { "2024": ["x.pdf"] }`.
+- **Ficheiros e subpastas no mesmo nível:** os ficheiros ficam em `arquivos` e as pastas como outras chaves no mesmo objeto, p.ex. `"relatorios": { "arquivos": ["a.pdf"], "2024": ["x.pdf"] }`.
+- **Objetos na raiz do bucket** (key sem `/`): aparecem em `arquivos` no topo de `pathTree`, p.ex. `{ "arquivos": ["readme.txt"], "pasta": { ... } }`.
+
+> **IAM:** é necessário permissão de listagem no bucket (por exemplo `s3:ListBucket` no recurso do bucket e, se usar prefixos restritivos na política, alinhar o prefixo).
 
 ### Exemplos
 
@@ -173,6 +204,29 @@ curl -s http://localhost:3006/s3/list-buckets
 ```bash
 curl -s "http://localhost:3006/s3/list-objects"
 curl -s "http://localhost:3006/s3/list-objects?prefix=pasta/&maxKeys=50"
+```
+
+**Resposta de list-objects (exemplo ilustrativo)**
+```json
+{
+  "objects": [
+    {
+      "key": "pasta/relatorio.pdf",
+      "size": 1024,
+      "lastModified": "2026-04-01T12:00:00.000Z",
+      "etag": "abc123",
+      "storageClass": "STANDARD"
+    }
+  ],
+  "pathTree": {
+    "pasta": {
+      "arquivos": ["relatorio.pdf"]
+    }
+  },
+  "isTruncated": false,
+  "nextContinuationToken": null,
+  "prefix": "pasta/"
+}
 ```
 
 **Upload**
