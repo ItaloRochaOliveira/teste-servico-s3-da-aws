@@ -1,7 +1,18 @@
 import { env } from "@/env";
+import type { BucketObjectSummary, ListBucketObjectsResult } from "@/types/s3ListBucketObjects";
+import { buildPathTreeFromKeys } from "@/utils/pathTreeFromKeys";
+import type { ListBucketObjectsOptions } from "@/types/interfaces/IS3Repository";
 import IS3Repository from "@/types/interfaces/IS3Repository";
 import { buildProcessedDownload, type ProcessedDownload } from "@/utils/fileDownload";
-import { Bucket, GetObjectCommand, ListBucketsCommand, ListBucketsCommandOutput, PutObjectCommand, PutObjectCommandOutput, S3Client } from "@aws-sdk/client-s3";
+import {
+  Bucket,
+  GetObjectCommand,
+  ListBucketsCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  PutObjectCommandOutput,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { createHash } from "node:crypto";
 
 export default class S3Repository implements IS3Repository {
@@ -14,6 +25,38 @@ export default class S3Repository implements IS3Repository {
         }).catch(error => {
             throw new Error(error.message);
         });
+    }
+
+    async listBucketObjects(options: ListBucketObjectsOptions): Promise<ListBucketObjectsResult> {
+        const response = await this.s3.send(
+            new ListObjectsV2Command({
+                Bucket: env.AWS_BUCKET_NAME,
+                Prefix: options.prefix,
+                ContinuationToken: options.continuationToken,
+                MaxKeys: options.maxKeys,
+            }),
+        ).catch((error: Error) => {
+            throw new Error(error.message);
+        });
+
+        const objects: BucketObjectSummary[] = (response.Contents ?? []).map((obj) => ({
+            key: obj.Key ?? "",
+            size: obj.Size ?? 0,
+            lastModified: obj.LastModified?.toISOString(),
+            etag: obj.ETag?.replaceAll('"', ""),
+            storageClass: obj.StorageClass,
+        }));
+
+        const keys = objects.map((o) => o.key).filter((k) => k.length > 0);
+        const pathTree = buildPathTreeFromKeys(keys);
+
+        return {
+            pathTree,
+            objects,
+            isTruncated: response.IsTruncated ?? false,
+            nextContinuationToken: response.NextContinuationToken,
+            prefix: options.prefix,
+        };
     }
 
     async upload(file: Express.Multer.File, caminho: string | undefined): Promise<PutObjectCommandOutput> {

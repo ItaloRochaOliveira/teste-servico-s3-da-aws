@@ -1,11 +1,37 @@
 import S3Repository from "@/repository/S3Repository";
 import S3Service from "@/service/S3Service";
 import { NextFunction, Request, Response } from "express";
+import { listObjectsQuerySchema } from "./schema.ts/listObjectsSchema";
 import uploadSchema, { downloadSchema } from "./schema.ts/uploadSchema";
 import { S3Client } from "@aws-sdk/client-s3";
 import { env } from "@/env";
 
 export default class S3Controller {
+    async listObjects(req: Request, res: Response, next: NextFunction) {
+        try {
+            const query = listObjectsQuerySchema.parse(req.query);
+
+            const s3 = new S3Client({
+                region: env.AWS_REGION,
+                credentials: {
+                    accessKeyId: env.AWS_ACCESS_KEY_ID,
+                    secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
+                },
+            });
+
+            const s3Service = new S3Service(new S3Repository(s3));
+            const result = await s3Service.listBucketObjects({
+                prefix: query.prefix,
+                continuationToken: query.continuationToken,
+                maxKeys: query.maxKeys,
+            });
+
+            return res.status(200).json(result);
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async listBuckets(req: Request, res: Response, next: NextFunction) {
         try {
             const s3 = new S3Client({

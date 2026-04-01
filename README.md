@@ -6,6 +6,7 @@ API REST em **Node.js** para listar buckets, enviar e baixar objetos no **Amazon
 
 ### 🪣 Amazon S3
 - ✅ Listagem de buckets da conta configurada
+- ✅ Listagem de objetos do bucket configurado (`ListObjectsV2`), com prefixo opcional e paginação
 - ✅ Upload de arquivos via **multipart/form-data** (campo `file`)
 - ✅ Download por **key** do objeto, com inferência de MIME pela extensão quando o S3 retorna tipo genérico
 - ✅ Resposta de download alinhada ao tipo: JSON parseado, texto (`text/plain`, `.txt`, etc.) ou binário com `Content-Type` adequado
@@ -152,6 +153,7 @@ Base: `http://localhost:<PORT>`
 |--------|------|-----------|
 | `GET` | `/` | Informações básicas da API (JSON) |
 | `GET` | `/s3/list-buckets` | Lista buckets |
+| `GET` | `/s3/list-objects` | Lista objetos do `AWS_BUCKET_NAME`; resposta inclui `objects` (plano) e `pathTree` (hierarquia por `/`) |
 | `POST` | `/s3/upload` | Upload de arquivo (`multipart/form-data`, campo **`file`**) |
 | `GET` | `/s3/download?fileName=<key>` | Download do objeto pela **key** no bucket |
 
@@ -165,6 +167,12 @@ curl -s http://localhost:3006/
 **Listar buckets**
 ```bash
 curl -s http://localhost:3006/s3/list-buckets
+```
+
+**Listar objetos do bucket** (todos ou com prefixo de pasta)
+```bash
+curl -s "http://localhost:3006/s3/list-objects"
+curl -s "http://localhost:3006/s3/list-objects?prefix=pasta/&maxKeys=50"
 ```
 
 **Upload**
