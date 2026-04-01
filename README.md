@@ -54,6 +54,8 @@ teste-servico-s3-da-aws/
 │   │   └── ErrorMidleware.ts
 │   ├── utils/                 # fileDownload (MIME/tipos), erros HTTP, etc.
 │   └── types/
+├── .github/
+│   └── IA_NOVAS_ROTAS.md      # Guia para IA e devs: novas rotas Express
 ├── DockerFile                 # Build da imagem da API
 ├── docker-compose.yml
 ├── .env.example
@@ -62,6 +64,10 @@ teste-servico-s3-da-aws/
 ├── tsconfig.json
 └── README.md                  # Este arquivo
 ```
+
+## 📖 Documentação adicional
+
+- **[Guia para criação de novas rotas](.github/IA_NOVAS_ROTAS.md)** — convenções de arquitetura (controller → service → repository), uso de Zod, Multer, middleware de erro, checklist e esqueletos de código para manter rotas alinhadas ao projeto (útil para humanos e para assistentes de IA).
 
 ## 🚀 Como Executar
 
@@ -223,8 +229,9 @@ curl -s -o baixado.txt "http://localhost:3006/s3/download?fileName=documento.txt
 
 1. Faça um **fork** do repositório
 2. Crie uma branch (`git checkout -b feature/nova-funcionalidade`)
-3. Commit com mensagens claras (`git commit -m "Descreve a mudança"`)
-4. Abra um **Pull Request**
+3. Ao adicionar ou alterar rotas HTTP, siga o **[guia em `.github/IA_NOVAS_ROTAS.md`](.github/IA_NOVAS_ROTAS.md)**.
+4. Commit com mensagens claras (`git commit -m "Descreve a mudança"`)
+5. Abra um **Pull Request**
 
 ## 📄 Licença
 
