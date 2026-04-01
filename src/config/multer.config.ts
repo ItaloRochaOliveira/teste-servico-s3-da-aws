@@ -22,6 +22,16 @@ export class MulterConfig {
     });
   };
 
+  static readonly noStorage = () => {
+    return multer({
+      storage: multer.memoryStorage(),
+      fileFilter: this.fileFilter,
+      limits: {
+        fileSize: 5 * 1024 * 1024, // Limita o tamanho do arquivo a 5MB
+      },
+    });
+  };
+
   static readonly fileFilter = (
     req: Request,
     file: Express.Multer.File,
@@ -50,4 +60,5 @@ export class MulterConfig {
       },
     });
   };
+
 }

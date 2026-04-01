@@ -1,5 +1,6 @@
 import IS3Repository from "@/types/interfaces/IS3Repository";
-import { Bucket, GetObjectCommandOutput, ListBucketsCommandOutput, PutObjectCommandOutput } from "@aws-sdk/client-s3";
+import type { ProcessedDownload } from "@/utils/fileDownload";
+import { Bucket, PutObjectCommandOutput } from "@aws-sdk/client-s3";
 
 export default class S3Service {
     constructor(private s3Repository: IS3Repository) {}
@@ -8,11 +9,11 @@ export default class S3Service {
         return this.s3Repository.listBuckets();
     }
 
-    async upload(file: Express.Multer.File): Promise<PutObjectCommandOutput> {
-        return this.s3Repository.upload(file);
+    async upload(file: Express.Multer.File, caminho: string | undefined): Promise<PutObjectCommandOutput> {
+        return this.s3Repository.upload(file, caminho);
     }
 
-    async download(fileName: string): Promise<GetObjectCommandOutput> {
+    async download(fileName: string): Promise<ProcessedDownload> {
         return this.s3Repository.download(fileName);
     }
 }
