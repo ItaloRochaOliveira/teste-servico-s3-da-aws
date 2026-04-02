@@ -6,11 +6,12 @@ API REST em **Node.js** para listar buckets, enviar e baixar objetos no **Amazon
 
 ### 🪣 Amazon S3
 - ✅ Listagem de buckets da conta configurada
-- ✅ Listagem de objetos do bucket configurado (`ListObjectsV2`), com prefixo opcional, paginação e **`pathTree`** (pastas como objetos, arquivos agrupados em arrays)
-- ✅ Upload de arquivos via **multipart/form-data** (campo `file`)
-- ✅ Download por **key** do objeto, com inferência de MIME pela extensão quando o S3 retorna tipo genérico
+- ✅ Listagem de objetos do bucket configurado (`ListObjectsV2`), com prefixo opcional, paginação e **`pathTree`** (pastas como objetos, ficheiros em arrays; na raiz do bucket os nomes ficam em **`__files__`**)
+- ✅ Upload de ficheiros via **multipart/form-data** (campo `file`), com `Content-Type` e checksum SHA-256 no `PutObject`
+- ✅ Download por **key** do objeto, com inferência de MIME pela extensão quando o S3 devolve tipo genérico
 - ✅ Resposta de download alinhada ao tipo: JSON parseado, texto (`text/plain`, `.txt`, etc.) ou binário com `Content-Type` adequado
-- ✅ `Content-Type` e checksum no upload (`PutObject`) para metadados corretos no bucket
+- ✅ Rotas **`*-encrypted`**: cifra na aplicação (AES-256-GCM) antes do envio; no `PutObject` pede **SSE-KMS** (`ServerSideEncryption: aws:kms`). O download desencripta no serviço e usa o MIME guardado em metadados (`origmime`). A listagem `list-objects-encrypted` é equivalente à listagem normal (só metadados de keys; não indica encriptação por objeto)
+- ✅ Logs **Winston** no repositório S3 com `ServerSideEncryption`, `SSEKMSKeyId`, `BucketKeyEnabled` e contexto (`PutObject` / `GetObject`) para confirmar o comportamento da API AWS
 
 ### 🛡️ Qualidade e DX
 - ✅ Variáveis de ambiente validadas com **Zod**
@@ -94,7 +95,7 @@ pnpm install
 3. **Configurar ambiente**
 ```bash
 cp .env.example .env
-# Edite .env com PORT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, AWS_BUCKET_NAME
+# Edite .env com as variáveis da tabela abaixo (AWS_* e, para rotas *-encrypted, S3_APP_*)
 ```
 
 4. **Executar em modo desenvolvimento**
@@ -126,15 +127,28 @@ A API é exposta em **http://localhost:3006** (mapeamento `3006:3006`).
 
 ### Variáveis de ambiente (`.env`)
 
+Validação centralizada em `src/env/index.ts` (Zod).
+
 | Variável | Descrição |
 |----------|-----------|
 | `PORT` | Porta HTTP (padrão **3006** se omitida) |
-| `AWS_ACCESS_KEY_ID` | Access key IAM com permissão no S3 |
+| `AWS_ACCESS_KEY_ID` | Access key IAM com permissão no S3 (e KMS, se usar rotas `*-encrypted` com SSE-KMS) |
 | `AWS_SECRET_ACCESS_KEY` | Secret correspondente |
 | `AWS_REGION` | Região do bucket (ex.: `us-east-1`) |
-| `AWS_BUCKET_NAME` | Nome do bucket para upload/download |
+| `AWS_BUCKET_NAME` | Nome do bucket para listagem, upload e download |
+| `S3_APP_ENCRYPTION_KEY` | Segredo (mín. 8 caracteres) para cifra na aplicação nas rotas `*-encrypted` |
+| `S3_APP_ENCRYPTION_VERSION_BYTE` | Número (configuração usada pelo módulo de cifra) |
+| `S3_APP_ENCRYPTION_IV_LENGTH` | Número |
+| `S3_APP_ENCRYPTION_TAG_LENGTH` | Número |
+| `S3_APP_ENCRYPTION_ALGO` | String (algoritmo configurável) |
+| `S3_APP_ENCRYPTION_KEY_LENGTH` | Número |
+| `S3_APP_ENCRYPTION_KEY_ALGO` | String |
+| `S3_APP_ENCRYPTION_KEY_IV` | Número |
+| `S3_APP_ENCRYPTION_KEY_TAG` | Número |
 
-Exemplo (não commite segredos reais):
+> **Nota:** As rotas normais (`/upload`, `/download`, `/list-objects`) não usam o segredo `S3_APP_ENCRYPTION_KEY`. A encriptação em repouso no S3 (SSE-S3 ou KMS, conforme política do bucket) é aplicada pela AWS; o cliente recebe sempre o objeto em claro no `GetObject` se tiver permissão. Os logs no servidor mostram `ServerSideEncryption` / `SSEKMSKeyId` devolvidos pela API.
+
+Exemplo (não commite segredos reais); ajuste os valores `S3_APP_ENCRYPTION_*` numéricos conforme o teu `.env.example` ou ambiente:
 
 ```env
 PORT=3006
@@ -143,6 +157,16 @@ AWS_ACCESS_KEY_ID=sua_access_key_id
 AWS_SECRET_ACCESS_KEY=sua_secret_access_key
 AWS_REGION=us-east-1
 AWS_BUCKET_NAME=seu-bucket
+
+S3_APP_ENCRYPTION_KEY=altere_para_um_segredo_longo_e_unico
+S3_APP_ENCRYPTION_VERSION_BYTE=1
+S3_APP_ENCRYPTION_IV_LENGTH=12
+S3_APP_ENCRYPTION_TAG_LENGTH=16
+S3_APP_ENCRYPTION_ALGO=aes-256-gcm
+S3_APP_ENCRYPTION_KEY_LENGTH=32
+S3_APP_ENCRYPTION_KEY_ALGO=sha256
+S3_APP_ENCRYPTION_KEY_IV=12
+S3_APP_ENCRYPTION_KEY_TAG=16
 ```
 
 ## 📡 Endpoints da API
@@ -152,10 +176,13 @@ Base: `http://localhost:<PORT>`
 | Método | Rota | Descrição |
 |--------|------|-----------|
 | `GET` | `/` | Informações básicas da API (JSON) |
-| `GET` | `/s3/list-buckets` | Lista buckets |
-| `GET` | `/s3/list-objects` | Lista objetos do `AWS_BUCKET_NAME`; documentação completa na subseção **GET /s3/list-objects** abaixo |
-| `POST` | `/s3/upload` | Upload de arquivo (`multipart/form-data`, campo **`file`**) |
-| `GET` | `/s3/download?fileName=<key>` | Download do objeto pela **key** no bucket |
+| `GET` | `/s3/list-buckets` | Lista buckets da conta |
+| `GET` | `/s3/list-objects` | Lista objetos do `AWS_BUCKET_NAME`; ver **GET /s3/list-objects** abaixo |
+| `POST` | `/s3/upload` | Upload (`multipart/form-data`, campo **`file`**); body opcional com `caminho` (pasta lógica) |
+| `GET` | `/s3/download?fileName=<key>` | Download pela **key** no bucket |
+| `GET` | `/s3/list-objects-encrypted` | Igual a `/s3/list-objects` (mesmos query params e resposta) |
+| `POST` | `/s3/upload-encrypted` | Upload com cifra na app + SSE-KMS no S3 (`multipart/form-data`, campo **`file`**) |
+| `GET` | `/s3/download-encrypted?fileName=<key>` | Download de objeto enviado por `upload-encrypted` (desencripta no serviço) |
 
 ### GET /s3/list-objects
 
@@ -174,7 +201,7 @@ Lista objetos do bucket definido em `AWS_BUCKET_NAME` via API **ListObjectsV2** 
 | Campo | Descrição |
 |-------|-----------|
 | `objects` | Lista plana de objetos: `key`, `size`, `lastModified` (ISO 8601), `etag`, `storageClass`. |
-| `pathTree` | Árvore derivada das keys (separador `/`). Pastas viram objetos aninhados; arquivos no mesmo diretório aparecem em **um array de strings** (nomes dos ficheiros). |
+| `pathTree` | Árvore derivada das keys (separador `/`). Pastas viram objetos aninhados; ficheiros no mesmo diretório aparecem em **um array de strings** (nomes). Objetos na **raiz** do bucket usam a chave **`__files__`**. |
 | `isTruncated` | `true` se existirem mais objetos; use `continuationToken` na próxima chamada. |
 | `nextContinuationToken` | Presente quando há próxima página; copie para o query `continuationToken`. |
 | `prefix` | O mesmo `prefix` enviado na query (eco). |
@@ -183,8 +210,7 @@ Lista objetos do bucket definido em `AWS_BUCKET_NAME` via API **ListObjectsV2** 
 
 - **Só ficheiros nessa pasta:** o valor é o array de nomes, p.ex. `"relatorios": ["a.pdf", "b.pdf"]`.
 - **Só subpastas:** o valor é um objeto com o próximo nível, p.ex. `"relatorios": { "2024": ["x.pdf"] }`.
-- **Ficheiros e subpastas no mesmo nível:** os ficheiros ficam em `arquivos` e as pastas como outras chaves no mesmo objeto, p.ex. `"relatorios": { "arquivos": ["a.pdf"], "2024": ["x.pdf"] }`.
-- **Objetos na raiz do bucket** (key sem `/`): aparecem em `arquivos` no topo de `pathTree`, p.ex. `{ "arquivos": ["readme.txt"], "pasta": { ... } }`.
+- **Objetos na raiz do bucket** (key sem `/`): aparecem em **`__files__`** no topo de `pathTree`, p.ex. `{ "__files__": ["readme.txt"], "pasta": { ... } }`.
 
 > **IAM:** é necessário permissão de listagem no bucket (por exemplo `s3:ListBucket` no recurso do bucket e, se usar prefixos restritivos na política, alinhar o prefixo).
 
@@ -219,9 +245,7 @@ curl -s "http://localhost:3006/s3/list-objects?prefix=pasta/&maxKeys=50"
     }
   ],
   "pathTree": {
-    "pasta": {
-      "arquivos": ["relatorio.pdf"]
-    }
+    "pasta": ["relatorio.pdf"]
   },
   "isTruncated": false,
   "nextContinuationToken": null,
@@ -247,11 +271,33 @@ curl -s -o baixado.txt "http://localhost:3006/s3/download?fileName=documento.txt
 }
 ```
 
+### Rotas `*-encrypted`
+
+| Rota | Comportamento resumido |
+|------|-------------------------|
+| `GET /s3/list-objects-encrypted` | Mesmos query params e corpo que `GET /s3/list-objects`. |
+| `POST /s3/upload-encrypted` | Igual ao upload (`file` + opcional `caminho` no body). O repositório cifra o buffer na aplicação, envia `Content-Type` `application/octet-stream` e metadados (`origmime`, `s3appenc`). No S3 pede **SSE-KMS**. Resposta: `{ "message": "File uploaded and encrypted successfully" }` (se o controller mantiver essa mensagem). |
+| `GET /s3/download-encrypted?fileName=<key>` | Só para objetos criados por `upload-encrypted` (metadado `s3appenc`). Desencripta no serviço e devolve o ficheiro com o MIME original. |
+
+**Confirmar encriptação / resposta da AWS:** no consola aparecem linhas `[S3 PutObject]` e `[S3 GetObject]` com `serverSideEncryption`, `sseKMSKeyId`, `bucketKeyEnabled`, etc.
+
+**Upload encrypted (exemplo)**
+```bash
+curl -X POST http://localhost:3006/s3/upload-encrypted \
+  -F "file=@./documento.txt"
+```
+
+**Download encrypted**
+```bash
+curl -s -o baixado.txt "http://localhost:3006/s3/download-encrypted?fileName=documento.txt"
+```
+
 ## 🔒 Segurança
 
 ### Implementações recomendadas na evolução do projeto
 - Credenciais **somente** via `.env` ou secret manager; **nunca** commitar `.env`
-- IAM com política mínima (apenas o bucket e ações necessárias: `s3:ListBucket`, `s3:GetObject`, `s3:PutObject`, etc.)
+- IAM com política mínima (apenas o bucket e ações necessárias: `s3:ListBucket`, `s3:GetObject`, `s3:PutObject`; para SSE-KMS, permissões `kms:Decrypt` / `kms:GenerateDataKey` na chave KMS usada)
+- Rotas `*-encrypted`: tratar `S3_APP_ENCRYPTION_KEY` como segredo forte; não reutilizar como `SSEKMSKeyId` (a chave KMS é um ARN/recurso à parte na AWS)
 - **HTTPS** em produção (reverse proxy ou load balancer)
 - **CORS** restrito aos domínios do frontend em produção
 
