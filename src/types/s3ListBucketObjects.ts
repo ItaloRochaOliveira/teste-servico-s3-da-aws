@@ -1,4 +1,4 @@
-import type { PathTree } from "@/utils/pathTreeFromKeys";
+import type { PathTreeValue } from "@/utils/pathTreeFromKeys";
 
 export type BucketObjectSummary = {
   key: string;
@@ -12,7 +12,7 @@ export type ListBucketObjectsResult = {
   /** Lista plana dos objetos (metadados S3). */
   objects: BucketObjectSummary[];
   /** Hierarquia de pastas/arquivos a partir das keys (segmentos por `/`). */
-  pathTree: PathTree;
+  pathTree: PathTreeValue;
   isTruncated: boolean;
   nextContinuationToken: string | undefined;
   prefix: string | undefined;
