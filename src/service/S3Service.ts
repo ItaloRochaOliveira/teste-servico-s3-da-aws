@@ -22,4 +22,12 @@ export default class S3Service {
     async download(fileName: string): Promise<ProcessedDownload> {
         return this.s3Repository.download(fileName);
     }
+
+    async uploadEncrypted(file: Express.Multer.File, caminho: string | undefined): Promise<PutObjectCommandOutput> {
+        return this.s3Repository.uploadEncrypted(file, caminho);
+    }
+
+    async downloadEncrypted(fileName: string): Promise<ProcessedDownload> {
+        return this.s3Repository.downloadEncrypted(fileName);
+    }
 }

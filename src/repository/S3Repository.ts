@@ -4,6 +4,8 @@ import { type PathTree } from "@/utils/pathTreeFromKeys";
 import type { ListBucketObjectsOptions } from "@/types/interfaces/IS3Repository";
 import IS3Repository from "@/types/interfaces/IS3Repository";
 import { buildProcessedDownload, type ProcessedDownload } from "@/utils/fileDownload";
+import { encryptBuffer, decryptBuffer } from "@/utils/appS3Encryption";
+import BadRequest from "@/utils/errors/BadRequest";
 import {
   Bucket,
   GetObjectCommand,
@@ -146,5 +148,63 @@ export default class S3Repository implements IS3Repository {
         const buffer = await response.Body.transformToByteArray();
 
         return buildProcessedDownload(fileName, response.ContentType, buffer);
+    }
+
+    async uploadEncrypted(
+        file: Express.Multer.File,
+        caminho: string | undefined,
+    ): Promise<PutObjectCommandOutput> {
+        const Body = encryptBuffer(file.buffer, env.S3_APP_ENCRYPTION_KEY);
+        const ChecksumSHA256 = await createHash("sha256").update(Body).digest("base64");
+        const Key = caminho ? `${caminho}/${file.originalname}` : file.originalname;
+
+        return await this.s3.send(
+            new PutObjectCommand({
+                Bucket: env.AWS_BUCKET_NAME,
+                Key,
+                Body,
+                ContentType: "application/octet-stream",
+                Metadata: {
+                    s3appenc: "v1",
+                    origmime: file.mimetype || "application/octet-stream",
+                },
+                ChecksumSHA256,
+            }),
+        );
+    }
+
+    async downloadEncrypted(fileName: string): Promise<ProcessedDownload> {
+        const response = await this.s3
+            .send(
+                new GetObjectCommand({
+                    Bucket: env.AWS_BUCKET_NAME,
+                    Key: fileName,
+                }),
+            )
+            .catch((error: Error) => {
+                throw new Error(error.message);
+            });
+
+        if (!response.Body) {
+            throw new Error("Objeto vazio no S3");
+        }
+
+        const meta = response.Metadata ?? {};
+        if (meta.s3appenc !== "v1") {
+            throw new BadRequest(
+                "O objeto não foi enviado pela rota encrypted ou não contém metadados de cifra esperados.",
+            );
+        }
+
+        const raw = await response.Body.transformToByteArray();
+        let plain: Buffer;
+        try {
+            plain = decryptBuffer(Buffer.from(raw), env.S3_APP_ENCRYPTION_KEY);
+        } catch {
+            throw new BadRequest("Falha ao decifrar o objeto (chave incorrompida ou ficheiro alterado).");
+        }
+
+        const contentType = meta.origmime?.trim() || "application/octet-stream";
+        return buildProcessedDownload(fileName, contentType, new Uint8Array(plain));
     }
 }
