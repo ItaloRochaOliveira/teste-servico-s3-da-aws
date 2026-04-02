@@ -13,4 +13,6 @@ export default interface IS3Repository {
   listBucketObjects(options: ListBucketObjectsOptions): Promise<ListBucketObjectsResult>;
   upload(file: Express.Multer.File, caminho: string | undefined): Promise<PutObjectCommandOutput>;
   download(fileName: string): Promise<ProcessedDownload>;
+  uploadEncrypted(file: Express.Multer.File, caminho: string | undefined): Promise<PutObjectCommandOutput>;
+  downloadEncrypted(fileName: string): Promise<ProcessedDownload>;
 }

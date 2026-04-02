@@ -8,6 +8,8 @@ const envSchema = z.object({
   AWS_SECRET_ACCESS_KEY: z.string(),
   AWS_REGION: z.string(),
   AWS_BUCKET_NAME: z.string(),
+  /** Segredo para AES-256-GCM nas rotas *-encrypted (criptografia no serviço antes do S3). */
+  S3_APP_ENCRYPTION_KEY: z.string().min(8),
 });
 
 const _env = envSchema.safeParse(process.env);
