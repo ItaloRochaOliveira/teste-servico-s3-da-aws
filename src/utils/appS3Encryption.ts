@@ -1,9 +1,10 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { env } from "@/env";
+import { CipherCCM, createCipheriv, createDecipheriv, createHash, DecipherCCM, randomBytes } from "node:crypto";
 
-const VERSION_BYTE = 0x01;
-const IV_LENGTH = 12;
-const TAG_LENGTH = 16;
-const ALGO = "aes-256-gcm";
+const VERSION_BYTE = env.S3_APP_ENCRYPTION_VERSION_BYTE;
+const IV_LENGTH = env.S3_APP_ENCRYPTION_IV_LENGTH;
+const TAG_LENGTH = env.S3_APP_ENCRYPTION_TAG_LENGTH;
+const ALGO = env.S3_APP_ENCRYPTION_ALGO;
 
 export function deriveKeyFromSecret(secret: string): Buffer {
     return createHash("sha256").update(secret, "utf8").digest();
@@ -14,7 +15,7 @@ export function encryptBuffer(plain: Buffer, secret: string): Buffer {
     const iv = randomBytes(IV_LENGTH);
     const cipher = createCipheriv(ALGO, key, iv);
     const encrypted = Buffer.concat([cipher.update(plain), cipher.final()]);
-    const tag = cipher.getAuthTag();
+    const tag = (cipher as CipherCCM).getAuthTag() as Buffer;
     return Buffer.concat([Buffer.from([VERSION_BYTE]), iv, encrypted, tag]);
 }
 
@@ -31,6 +32,6 @@ export function decryptBuffer(payload: Buffer, secret: string): Buffer {
     const tag = payload.subarray(payload.length - TAG_LENGTH);
     const ciphertext = payload.subarray(1 + IV_LENGTH, payload.length - TAG_LENGTH);
     const decipher = createDecipheriv(ALGO, key, iv);
-    decipher.setAuthTag(tag);
+    (decipher as DecipherCCM).setAuthTag(tag);
     return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
 }
