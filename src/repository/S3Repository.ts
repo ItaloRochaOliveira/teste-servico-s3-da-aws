@@ -1,6 +1,6 @@
 import { env } from "@/env";
 import type { BucketObjectSummary, ListBucketObjectsResult } from "@/types/s3ListBucketObjects";
-import { buildPathTreeFromKeys } from "@/utils/pathTreeFromKeys";
+import { type PathTree } from "@/utils/pathTreeFromKeys";
 import type { ListBucketObjectsOptions } from "@/types/interfaces/IS3Repository";
 import IS3Repository from "@/types/interfaces/IS3Repository";
 import { buildProcessedDownload, type ProcessedDownload } from "@/utils/fileDownload";
@@ -14,6 +14,9 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { createHash } from "node:crypto";
+
+/** Acumula nomes de ficheiro no diretório durante o `reduce`; depois vira `string[]`. */
+const FILES_KEY = "__files__";
 
 export default class S3Repository implements IS3Repository {
     constructor(private s3: S3Client) {}
@@ -39,6 +42,48 @@ export default class S3Repository implements IS3Repository {
             throw new Error(error.message);
         });
 
+        const keys = (response.Contents ?? []).map((obj) => (obj.Key ?? ""));
+
+        const rawTree = keys.reduce<PathTree>((acc, key) => {
+            const path = key.split("/").filter((s) => s.length > 0);
+            if (path.length === 0) return acc;
+
+            let current: PathTree = acc;
+            for (let i = 0; i < path.length; i++) {
+                const segment = path[i];
+                const isUltimoSegmento = i === path.length - 1;
+                const isPenultimoSegmento = i === path.length - 2;
+
+                if (isPenultimoSegmento) {
+                    if (!Array.isArray(current[segment])) {
+                        current[segment] = [];
+                    }
+                } else if (isUltimoSegmento) {
+                    if (path.length === 1) {
+                        if (!Array.isArray(current[FILES_KEY])) {
+                            current[FILES_KEY] = [];
+                        }
+                        (current[FILES_KEY] as string[]).push(segment);
+                    } else {
+                        const dirKey = path[i - 1];
+                        const files = current[dirKey];
+                        if (Array.isArray(files)) {
+                            files.push(segment);
+                        }
+                    }
+                } else {
+                    if (!current[segment]) {
+                        current[segment] = {};
+                    }
+                    const next = current[segment];
+                    if (Array.isArray(next)) {
+                        break;
+                    }
+                    current = next as PathTree;
+                }
+            }
+            return acc;
+        }, {});
         const objects: BucketObjectSummary[] = (response.Contents ?? []).map((obj) => ({
             key: obj.Key ?? "",
             size: obj.Size ?? 0,
@@ -47,11 +92,8 @@ export default class S3Repository implements IS3Repository {
             storageClass: obj.StorageClass,
         }));
 
-        const keys = objects.map((o) => o.key).filter((k) => k.length > 0);
-        const pathTree = buildPathTreeFromKeys(keys);
-
         return {
-            pathTree,
+            pathTree: rawTree,
             objects,
             isTruncated: response.IsTruncated ?? false,
             nextContinuationToken: response.NextContinuationToken,
